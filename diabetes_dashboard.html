@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diabetes Readmission Analytics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b27;
+  --bg3: #1e2536;
+  --border: #2a3246;
+  --border2: #364055;
+  --text: #e6eaf4;
+  --muted: #7b89a8;
+  --dim: #4a5670;
+  --teal: #00d4b1;
+  --teal2: #00a88e;
+  --coral: #ff6b6b;
+  --blue: #4e9eff;
+  --amber: #ffb347;
+  --purple: #a78bfa;
+  --green: #34d399;
+  --red: #f87171;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6}
+
+/* UPLOAD SCREEN */
+#upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:32px;position:relative}
+#upload-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 30%, rgba(0,212,177,.06) 0%, transparent 70%);pointer-events:none}
+.upload-logo{font-size:13px;font-weight:500;letter-spacing:.14em;color:var(--teal);text-transform:uppercase}
+.upload-title{font-size:36px;font-weight:300;color:var(--text);text-align:center;line-height:1.3}
+.upload-title strong{font-weight:600;color:var(--teal)}
+.upload-subtitle{font-size:15px;color:var(--muted);text-align:center;max-width:440px}
+.upload-box{width:400px;border:1.5px dashed var(--border2);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg2);position:relative}
+.upload-box:hover,.upload-box.drag{border-color:var(--teal);background:rgba(0,212,177,.04)}
+.upload-icon{font-size:40px;margin-bottom:12px;opacity:.7}
+.upload-box p{color:var(--muted);font-size:14px;line-height:1.8}
+.upload-box strong{color:var(--teal);font-weight:500}
+#file-input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-hint{font-size:12px;color:var(--dim);text-align:center}
+.progress-bar{width:400px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--teal);width:0%;transition:width .3s;border-radius:2px}
+
+/* MAIN DASHBOARD */
+#dashboard{display:none;flex-direction:column;height:100vh;overflow:hidden}
+
+/* TOPBAR */
+.topbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:24px;flex-shrink:0;position:relative;z-index:10}
+.topbar-logo{font-size:12px;font-weight:600;letter-spacing:.12em;color:var(--teal);text-transform:uppercase;white-space:nowrap}
+.topbar-divider{width:1px;height:20px;background:var(--border);flex-shrink:0}
+.topbar-title{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap}
+.topbar-meta{font-size:12px;color:var(--dim);margin-left:auto;display:flex;align-items:center;gap:16px}
+.meta-chip{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--muted)}
+.meta-chip span{color:var(--teal);font-weight:600;font-family:'DM Mono',monospace}
+
+/* NAV */
+.nav{height:44px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;padding:0 24px;gap:4px;flex-shrink:0}
+.nav-btn{padding:0 16px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;font-family:'DM Sans',sans-serif;font-weight:400;position:relative;transition:color .15s;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.nav-btn::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--teal);transform:scaleX(0);transition:transform .15s;border-radius:2px 2px 0 0}
+.nav-btn.active{color:var(--teal);font-weight:500}
+.nav-btn.active::after{transform:scaleX(1)}
+.nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* CONTENT AREA */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 24px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.content::-webkit-scrollbar{width:5px}
+.content::-webkit-scrollbar-track{background:transparent}
+.content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* PAGE */
+.page{display:none}
+.page.active{display:block}
+.page-header{margin-bottom:20px}
+.page-header h1{font-size:20px;font-weight:600;color:var(--text)}
+.page-header p{font-size:13px;color:var(--muted);margin-top:2px}
+
+/* KPI CARDS */
+.kpi-row{display:grid;gap:12px;margin-bottom:20px}
+.kpi-row.cols4{grid-template-columns:repeat(4,1fr)}
+.kpi-row.cols3{grid-template-columns:repeat(3,1fr)}
+.kpi-row.cols2{grid-template-columns:repeat(2,1fr)}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi.teal::before{background:var(--teal)}
+.kpi.coral::before{background:var(--coral)}
+.kpi.blue::before{background:var(--blue)}
+.kpi.amber::before{background:var(--amber)}
+.kpi.purple::before{background:var(--purple)}
+.kpi.green::before{background:var(--green)}
+.kpi.red::before{background:var(--red)}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.kpi-value{font-size:28px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text);line-height:1}
+.kpi-value.alert{color:var(--coral)}
+.kpi-value.good{color:var(--teal)}
+.kpi-sub{font-size:11px;color:var(--dim);margin-top:4px}
+
+/* CHART GRID */
+.chart-grid{display:grid;gap:16px;margin-bottom:16px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:1fr 1fr 1fr}
+.grid-1-2{grid-template-columns:1fr 2fr}
+.grid-2-1{grid-template-columns:2fr 1fr}
+.grid-full{grid-template-columns:1fr}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative}
+.card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.card-sub{font-size:11px;color:var(--dim);margin-bottom:16px}
+.chart-wrap{position:relative}
+
+/* GAUGE */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.gauge-value{font-size:32px;font-weight:600;font-family:'DM Mono',monospace;color:var(--coral)}
+.gauge-label{font-size:11px;color:var(--muted);text-align:center}
+.gauge-target{font-size:11px;color:var(--dim)}
+
+/* HEATMAP */
+.heatmap{width:100%;border-collapse:collapse;font-size:12px}
+.heatmap th{padding:6px 8px;color:var(--muted);font-weight:500;font-size:11px;text-align:center;border-bottom:1px solid var(--border)}
+.heatmap td{padding:6px 8px;text-align:center;border:1px solid var(--bg3);font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+.heatmap .row-header{text-align:left;color:var(--text);font-family:'DM Sans',monospace;font-size:12px;padding:6px 12px 6px 8px;background:var(--bg3);white-space:nowrap}
+
+/* FUNNEL */
+.funnel{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0}
+.funnel-step{width:100%;max-width:400px;display:flex;align-items:center;gap:12px}
+.funnel-bar-wrap{flex:1;height:36px;background:var(--bg3);border-radius:4px;overflow:hidden;position:relative}
+.funnel-bar{height:100%;border-radius:4px;transition:width .8s ease;display:flex;align-items:center;padding-left:10px;font-size:12px;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden}
+.funnel-label{font-size:12px;color:var(--muted);width:180px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.funnel-count{font-size:11px;font-family:'DM Mono',monospace;color:var(--dim);width:60px;text-align:right}
+.funnel-arrow{text-align:center;color:var(--dim);font-size:16px;line-height:1}
+
+/* RISK TABLE */
+.risk-table{width:100%;border-collapse:collapse;font-size:12px}
+.risk-table th{padding:8px 10px;color:var(--muted);font-weight:500;font-size:11px;text-align:left;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.06em}
+.risk-table td{padding:8px 10px;border-bottom:1px solid var(--bg3);font-family:'DM Mono',monospace}
+.risk-table td:first-child{font-family:'DM Sans',sans-serif}
+.risk-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;font-family:'DM Sans',sans-serif}
+.badge-top{background:rgba(248,113,113,.15);color:var(--red)}
+.badge-mid{background:rgba(255,179,71,.15);color:var(--amber)}
+.badge-low{background:rgba(52,211,153,.15);color:var(--green)}
+
+/* WHAT-IF */
+.whatif-wrap{padding:8px 0}
+.whatif-slider{width:100%;margin:12px 0;accent-color:var(--teal)}
+.whatif-display{display:flex;gap:16px;margin-top:16px}
+.whatif-box{flex:1;background:var(--bg3);border-radius:10px;padding:14px;text-align:center}
+.whatif-num{font-size:24px;font-weight:600;font-family:'DM Mono',monospace;color:var(--teal)}
+.whatif-lbl{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* LEGEND */
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.legend-rect{width:14px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* FILTER BAR */
+.filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-bar label{font-size:12px;color:var(--muted)}
+.filter-bar select{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;outline:none}
+.filter-bar select:focus{border-color:var(--teal)}
+.filter-reset{background:none;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+.filter-reset:hover{border-color:var(--teal);color:var(--teal)}
+
+/* INSIGHT BOX */
+.insight{background:rgba(0,212,177,.06);border:1px solid rgba(0,212,177,.2);border-radius:10px;padding:12px 16px;margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7}
+.insight strong{color:var(--teal);font-weight:500}
+
+/* SCATTER LEGEND */
+.quadrant-labels{position:absolute;pointer-events:none;width:100%;height:100%}
+
+@media(max-width:900px){
+  .kpi-row.cols4{grid-template-columns:repeat(2,1fr)}
+  .grid-2,.grid-1-2,.grid-2-1{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- UPLOAD SCREEN -->
+<div id="upload-screen">
+  <div class="upload-logo">Diabetes Analytics · 130 US Hospitals · 1999–2008</div>
+  <div class="upload-title">Patient Readmission<br><strong>Risk Dashboard</strong></div>
+  <div class="upload-subtitle">Upload the cleaned CSV file to generate the complete 5-page analytics report</div>
+  <div class="upload-box" id="drop-zone">
+    <input type="file" id="file-input" accept=".csv">
+    <div class="upload-icon">📂</div>
+    <p><strong>diabetes_cleaned_for_powerbi.csv</strong><br>Drop file here or click to browse</p>
+  </div>
+  <div class="progress-bar" id="prog-bar"><div class="progress-fill" id="prog-fill"></div></div>
+  <div class="upload-hint">File never leaves your browser · 69,990 patient records · 27 columns</div>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <span class="topbar-logo">DiabetesBI</span>
+    <div class="topbar-divider"></div>
+    <span class="topbar-title">Readmission Risk Analysis — 130 US Hospitals</span>
+    <div class="topbar-meta">
+      <span class="meta-chip">Patients: <span id="meta-total">—</span></span>
+      <span class="meta-chip">Period: <span>1999–2008</span></span>
+      <span class="meta-chip">30-day readmit: <span id="meta-rate">—</span></span>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nav-btn active" onclick="goPage(0)" data-page="0"><span class="nav-dot" style="background:#a78bfa"></span>Executive Summary</button>
+    <button class="nav-btn" onclick="goPage(1)" data-page="1"><span class="nav-dot" style="background:#34d399"></span>Demographics</button>
+    <button class="nav-btn" onclick="goPage(2)" data-page="2"><span class="nav-dot" style="background:#ff6b6b"></span>Clinical Factors</button>
+    <button class="nav-btn" onclick="goPage(3)" data-page="3"><span class="nav-dot" style="background:#4e9eff"></span>Medication Analysis</button>
+    <button class="nav-btn" onclick="goPage(4)" data-page="4"><span class="nav-dot" style="background:#ffb347"></span>Risk Scorecard</button>
+  </div>
+  <div class="content">
+
+    <!-- PAGE 1: EXECUTIVE SUMMARY -->
+    <div class="page active" id="page-0">
+      <div class="page-header">
+        <h1>Executive Summary</h1>
+        <p>High-level readmission statistics across all 69,990 diabetic patient encounters</p>
+      </div>
+      <div class="kpi-row cols4">
+        <div class="kpi teal"><div class="kpi-label">Total Patients</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub">Unique encounters analyzed</div></div>
+        <div class="kpi coral"><div class="kpi-label">30-Day Readmission Rate</div><div class="kpi-value alert" id="kpi-readmit">—</div><div class="kpi-sub">Readmitted within 30 days</div></div>
+        <div class="kpi blue"><div class="kpi-label">Avg Hospital Stay</div><div class="kpi-value" id="kpi-stay">—</div><div class="kpi-sub">Days between admit & discharge</div></div>
+        <div class="kpi amber"><div class="kpi-label">HbA1c Test Rate</div><div class="kpi-value alert" id="kpi-hba1c">—</div><div class="kpi-sub">Of patients had blood sugar tested</div></div>
+      </div>
+      <div class="chart-grid grid-1-2">
+        <div class="card">
+          <div class="card-title">Readmission Split</div>
+          <div class="card-sub">All 3 readmission categories</div>
+          <div class="chart-wrap" style="height:260px"><canvas id="c-donut1"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">30-Day Readmission Rate by Diagnosis Group</div>
+          <div class="card-sub">Horizontal bar · sorted by readmission rate · dashed line = overall average</div>
+          <div class="chart-wrap" style="height:260px"><canvas id="c-diag-bar"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">HbA1c Testing Compliance Gauge</div>
+          <div class="card-sub">Target: 50% · Actual: see gauge</div>
+          <div class="gauge-wrap" style="padding:10px 0">
+            <canvas id="c-gauge1" width="260" height="150"></canvas>
+            <div class="gauge-value" id="gauge1-val">—</div>
+            <div class="gauge-label">% of patients tested for HbA1c</div>
+            <div class="gauge-target">Target: 50% &nbsp;|&nbsp; Current: <span style="color:var(--coral)" id="gauge1-val2">—</span></div>
+          </div>
+          <div class="insight">⚠️ <strong>Only 1 in 5 patients</strong> had HbA1c tested. Research shows tested patients have lower readmission rates — this is the key protocol gap.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Readmission by Admission Source</div>
+          <div class="card-sub">Emergency vs Referral vs Other</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c-adm-src"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 2: DEMOGRAPHICS -->
+    <div class="page" id="page-1">
+      <div class="page-header">
+        <h1>Patient Demographics</h1>
+        <p>Who is getting readmitted — age, gender, race breakdown</p>
+      </div>
+      <div class="kpi-row cols4">
+        <div class="kpi teal"><div class="kpi-label">Median Age</div><div class="kpi-value" id="kpi-age">—</div><div class="kpi-sub">Years (mean: 64.9)</div></div>
+        <div class="kpi coral"><div class="kpi-label">Age 60+ Readmit Rate</div><div class="kpi-value alert" id="kpi-old">—</div><div class="kpi-sub">Highest risk age group</div></div>
+        <div class="kpi blue"><div class="kpi-label">Female Patients</div><div class="kpi-value" id="kpi-female">—</div><div class="kpi-sub">Gender split</div></div>
+        <div class="kpi green"><div class="kpi-label">Age 30 or Under</div><div class="kpi-value good" id="kpi-young">—</div><div class="kpi-sub">Lowest readmission risk group</div></div>
+      </div>
+      <div class="chart-grid grid-full">
+        <div class="card">
+          <div class="card-title">Readmission Rate by Age Group</div>
+          <div class="card-sub">Column chart · dashed line = overall 9.0% average · sorted chronologically</div>
+          <div class="chart-wrap" style="height:240px"><canvas id="c-age-bar"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">Patient Volume by Race</div>
+          <div class="card-sub">Donut chart — hover for readmission rate</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c-race-donut"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Race × Readmission Rate</div>
+          <div class="card-sub">Which racial groups have higher readmission?</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c-race-bar"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">Gender Distribution</div>
+          <div class="card-sub">Patient volume and readmission rate by gender</div>
+          <div class="chart-wrap" style="height:180px"><canvas id="c-gender"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Readmission Rate by Discharge Destination</div>
+          <div class="card-sub">Where patients go after discharge affects readmission</div>
+          <div class="chart-wrap" style="height:180px"><canvas id="c-discharge"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: CLINICAL FACTORS -->
+    <div class="page" id="page-2">
+      <div class="page-header">
+        <h1>Clinical Factors</h1>
+        <p>HbA1c testing, diagnosis groups, and clinical complexity vs readmission</p>
+      </div>
+      <div class="kpi-row cols4">
+        <div class="kpi red"><div class="kpi-label">No HbA1c Test</div><div class="kpi-value alert" id="kpi-nohba1c">—</div><div class="kpi-sub">Had NO blood sugar test</div></div>
+        <div class="kpi coral"><div class="kpi-label">Readmit — Not Tested</div><div class="kpi-value alert" id="kpi-readnone">—</div><div class="kpi-sub">Readmission rate when untested</div></div>
+        <div class="kpi green"><div class="kpi-label">Readmit — Normal HbA1c</div><div class="kpi-value good" id="kpi-readnorm">—</div><div class="kpi-sub">Lowest readmit among tested</div></div>
+        <div class="kpi blue"><div class="kpi-label">Highest Risk Diagnosis</div><div class="kpi-value" style="font-size:18px" id="kpi-topdx">—</div><div class="kpi-sub">Primary diagnosis with most readmissions</div></div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">HbA1c Test Result vs 30-Day Readmission Rate</div>
+          <div class="card-sub">Core insight — the most important chart in this dashboard</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c-hba1c-readmit"></canvas></div>
+          <div class="insight">💡 <strong>Key finding:</strong> Patients with NO HbA1c test have the highest readmission rate. Even an abnormal result with medication change leads to better outcomes than no test at all.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Readmission Rate vs Average by Diagnosis Group</div>
+          <div class="card-sub">Deviation from 9.0% overall average — positive = worse than avg</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c-diag-waterfall"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid grid-full">
+        <div class="card">
+          <div class="card-title">Heat Map — Readmission Rate: Diagnosis Group × HbA1c Status</div>
+          <div class="card-sub">Matrix with conditional formatting · darker red = higher readmission risk · hover for exact values</div>
+          <div id="heatmap-container" style="overflow-x:auto;margin-top:4px"></div>
+          <div class="insight">🔥 <strong>Red cells</strong> = highest risk combinations. The Circulatory + No Test cell is typically the most dangerous.</div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">Avg Time in Hospital by Diagnosis Group</div>
+          <div class="card-sub">Longer stays often indicate sicker patients</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c-stay-diag"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Number of Diagnoses by Readmission Status</div>
+          <div class="card-sub">More diagnoses = more complex patient = higher risk?</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c-ndiag"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 4: MEDICATION ANALYSIS -->
+    <div class="page" id="page-3">
+      <div class="page-header">
+        <h1>Medication Analysis</h1>
+        <p>How medication decisions during the hospital stay influence readmission outcomes</p>
+      </div>
+      <div class="kpi-row cols4">
+        <div class="kpi blue"><div class="kpi-label">Avg Medications</div><div class="kpi-value" id="kpi-meds">—</div><div class="kpi-sub">Distinct drugs per patient</div></div>
+        <div class="kpi teal"><div class="kpi-label">Medication Changed</div><div class="kpi-value good" id="kpi-changed">—</div><div class="kpi-sub">Dosage or drug changed</div></div>
+        <div class="kpi amber"><div class="kpi-label">On Diabetes Med</div><div class="kpi-value" id="kpi-diabmed">—</div><div class="kpi-sub">Diabetes medication prescribed</div></div>
+        <div class="kpi purple"><div class="kpi-label">Med Change (Tested)</div><div class="kpi-value" id="kpi-changetested">—</div><div class="kpi-sub">Changed meds after HbA1c test</div></div>
+      </div>
+      <div class="chart-grid grid-1-2">
+        <div class="card">
+          <div class="card-title">Patient Care Pathway Funnel</div>
+          <div class="card-sub">Where patients fall off the optimal care path</div>
+          <div id="funnel-container" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Number of Medications vs Readmission Rate</div>
+          <div class="card-sub">Line chart — reveals U-shaped relationship</div>
+          <div class="chart-wrap" style="height:260px"><canvas id="c-med-line"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">Insulin Prescription Status vs Readmission</div>
+          <div class="card-sub">No / Steady / Up / Down dosage changes</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c-insulin"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Medication Change Rate by HbA1c Result</div>
+          <div class="card-sub">Tested doctors change meds more — 55% vs 42.5%</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c-med-change"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 5: RISK SCORECARD -->
+    <div class="page" id="page-4">
+      <div class="page-header">
+        <h1>Risk Model Scorecard</h1>
+        <p>Feature importance from Random Forest model · AUC 0.67 · What-if intervention simulator</p>
+      </div>
+      <div class="kpi-row cols4">
+        <div class="kpi amber"><div class="kpi-label">Model AUC Score</div><div class="kpi-value" style="color:var(--amber)">0.670</div><div class="kpi-sub">Random Forest (0.5=random, 1.0=perfect)</div></div>
+        <div class="kpi red"><div class="kpi-label">Top Predictor</div><div class="kpi-value" style="font-size:16px;color:var(--red)">Prior Inpatient</div><div class="kpi-sub">Most important readmission signal</div></div>
+        <div class="kpi coral"><div class="kpi-label">High Risk Patients</div><div class="kpi-value alert" id="kpi-highrisk">—</div><div class="kpi-sub">Meet 3+ high-risk criteria</div></div>
+        <div class="kpi purple"><div class="kpi-label">Avg Prior Inpatient (Readmitted)</div><div class="kpi-value" id="kpi-prior">—</div><div class="kpi-sub">Prior visits of <30d readmit patients</div></div>
+      </div>
+      <div class="chart-grid grid-2-1">
+        <div class="card">
+          <div class="card-title">Feature Importance — Random Forest Model</div>
+          <div class="card-sub">Which factors best predict 30-day readmission</div>
+          <div class="chart-wrap" style="height:280px"><canvas id="c-feat-imp"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Model Performance Gauge</div>
+          <div class="card-sub">AUC score vs benchmarks</div>
+          <div class="gauge-wrap" style="padding:10px 0">
+            <canvas id="c-gauge2" width="220" height="130"></canvas>
+            <div class="gauge-value" style="color:var(--amber)">0.670</div>
+            <div class="gauge-label">ROC-AUC Score</div>
+            <div class="gauge-target">Poor: 0.50 · Acceptable: 0.67 · Good: 0.75+</div>
+          </div>
+          <div class="insight" style="margin-top:16px">📊 <strong>AUC 0.67</strong> is clinically realistic for readmission models. No model in this domain consistently exceeds 0.75 with limited data.</div>
+        </div>
+      </div>
+      <div class="chart-grid grid-2">
+        <div class="card">
+          <div class="card-title">Risk Quadrant — Prior Visits × Diagnoses Count</div>
+          <div class="card-sub">Bubble size = readmission rate · Each bubble = one age group</div>
+          <div class="chart-wrap" style="height:230px"><canvas id="c-risk-scatter"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">What-If Simulator — HbA1c Testing Increase</div>
+          <div class="card-sub">Drag slider to estimate readmissions avoided if testing rate improves</div>
+          <div class="whatif-wrap">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px">
+              <span>Current: 18.4%</span><span>Goal: 100%</span>
+            </div>
+            <input type="range" class="whatif-slider" id="whatif-slider" min="18" max="100" value="18" step="1" oninput="updateWhatIf(this.value)">
+            <div style="text-align:center;font-size:13px;color:var(--muted)">HbA1c Testing Rate: <strong style="color:var(--teal)" id="whatif-rate">18%</strong></div>
+            <div class="whatif-display">
+              <div class="whatif-box">
+                <div class="whatif-num" id="whatif-avoided">0</div>
+                <div class="whatif-lbl">Estimated readmissions avoided</div>
+              </div>
+              <div class="whatif-box">
+                <div class="whatif-num" id="whatif-pct">0%</div>
+                <div class="whatif-lbl">Reduction in 30-day readmits</div>
+              </div>
+              <div class="whatif-box">
+                <div class="whatif-num" id="whatif-cost">$0</div>
+                <div class="whatif-lbl">Estimated cost savings ($5K/readmit)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-grid grid-full">
+        <div class="card">
+          <div class="card-title">High-Risk Patient Profile — Top Readmission Cases</div>
+          <div class="card-sub">Patients readmitted within 30 days · sorted by prior inpatient visits</div>
+          <div id="risk-table-wrap" style="overflow-x:auto;margin-top:8px;max-height:240px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end content -->
+</div><!-- end dashboard -->
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let DATA = [], STATS = {}, CHARTS = {};
+
+// ─── UPLOAD LOGIC ────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const progBar   = document.getElementById('prog-bar');
+const progFill  = document.getElementById('prog-fill');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  progBar.style.display = 'block';
+  progFill.style.width = '30%';
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete(results) {
+      progFill.style.width = '70%';
+      setTimeout(() => {
+        DATA = results.data;
+        processData();
+        progFill.style.width = '100%';
+        setTimeout(() => {
+          document.getElementById('upload-screen').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'flex';
+          buildAllCharts();
+        }, 300);
+      }, 200);
+    }
+  });
+}
+
+// ─── DATA PROCESSING ─────────────────────────────────────────────────────────
+function processData() {
+  const n = DATA.length;
+  let r30=0, r30gt=0, rno=0, staySum=0, hba1cTested=0, medSum=0;
+  const byDiag={}, byAge={}, byRace={}, byGender={}, byA1C={}, byInsulin={}, byChange={}, byAdmSrc={}, byDischarge={};
+  const medBuckets={}, priorVisitSums={priorIn30:0, count30:0};
+  const ageOrder=['[0-10)','[10-20)','[20-30)','[30-40)','[40-50)','[50-60)','[60-70)','[70-80)','[80-90)','[90-100)'];
+  const ageNums=[];
+
+  DATA.forEach(r => {
+    const read = r.readmitted;
+    const bin = +r.readmitted_binary||0;
+    if(read==='<30') r30++;
+    else if(read==='>30') r30gt++;
+    else rno++;
+    staySum += +r.time_in_hospital||0;
+    if(r.A1Cresult && r.A1Cresult!=='None') hba1cTested++;
+    medSum += +r.num_medications||0;
+    if(r.age_numeric) ageNums.push(+r.age_numeric);
+    if(bin===1){
+      priorVisitSums.priorIn30 += +r.number_inpatient||0;
+      priorVisitSums.count30++;
+    }
+
+    // Group helpers
+    function grp(obj, key){ if(!obj[key]) obj[key]={n:0,r30:0,staySum:0,meds:0}; obj[key].n++; if(bin)obj[key].r30++; obj[key].staySum+=+r.time_in_hospital||0; obj[key].meds+=+r.num_medications||0; }
+    grp(byDiag, r.diag_group||'Other');
+    grp(byAge,  r.age||'Unknown');
+    grp(byRace, r.race||'Unknown');
+    grp(byGender, r.gender||'Unknown');
+    grp(byA1C, r.A1Cresult||'None');
+    grp(byInsulin, r.insulin||'No');
+    grp(byChange, r.change||'No');
+
+    // Simplified admission source
+    const src = r.admission_source_label||'';
+    const srcKey = src.includes('Emergency')?'Emergency':src.includes('Referral')||src.includes('referral')?'Referral':'Other';
+    grp(byAdmSrc, srcKey);
+
+    // Discharge — simplify labels
+    const dl = r.discharge_label||'';
+    const dk = dl.includes('home')?'Home':dl.includes('SNF')||dl.includes('Skilled')?'SNF':dl.includes('ICF')?'ICF':dl.includes('rehab')||dl.includes('Rehab')?'Rehab':dl.includes('long term')?'Long-term':dl.includes('hospital')||dl.includes('inpatient')?'Transfer':'Other';
+    grp(byDischarge, dk);
+
+    // Medication buckets
+    const mb = Math.min(+r.num_medications||0, 40);
+    const bk = Math.round(mb/2)*2;
+    if(!medBuckets[bk]) medBuckets[bk]={n:0,r30:0};
+    medBuckets[bk].n++; if(bin) medBuckets[bk].r30++;
+  });
+
+  // Compute rates
+  function rateObj(obj){ return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k,{...v, rate:(v.r30/v.n*100)}])); }
+
+  // Median age
+  ageNums.sort((a,b)=>a-b);
+  const medianAge = ageNums[Math.floor(ageNums.length/2)];
+
+  // Age 60+ rate
+  let age60n=0,age60r=0;
+  ageOrder.filter(a=>+a.replace(/\D/g,'').slice(0,2)>=60).forEach(a=>{ if(byAge[a]){age60n+=byAge[a].n;age60r+=byAge[a].r30;}});
+  const age60rate = age60n ? age60r/age60n*100 : 0;
+  let ageLT30n=0,ageLT30r=0;
+  ageOrder.filter(a=>+a.replace(/\D/g,'').slice(0,2)<30).forEach(a=>{ if(byAge[a]){ageLT30n+=byAge[a].n;ageLT30r+=byAge[a].r30;}});
+  const ageLT30rate = ageLT30n ? ageLT30r/ageLT30n*100 : 0;
+
+  // Top dx
+  const diagRates = rateObj(byDiag);
+  const topDx = Object.entries(diagRates).sort((a,b)=>b[1].rate-a[1].rate)[0];
+
+  // Med change stats
+  const changedRows = DATA.filter(r=>r.change==='Ch');
+  const changedTestedRows = changedRows.filter(r=>r.A1Cresult && r.A1Cresult!=='None');
+  const medChangeRate = n ? changedRows.length/n*100 : 0;
+  const changeTestedRate = hba1cTested ? changedTestedRows.length/hba1cTested*100 : 0;
+  const onDiabMed = DATA.filter(r=>r.diabetesMed==='Yes').length/n*100;
+  const femaleRate = byGender['Female'] ? byGender['Female'].n/n*100 : 0;
+
+  // High risk: inpatient>=2 AND diagnoses>=7 AND stay>=5
+  const highRisk = DATA.filter(r=>+r.number_inpatient>=2 && +r.number_diagnoses>=7 && +r.time_in_hospital>=5).length;
+
+  // Med buckets sorted
+  const medArr = Object.entries(medBuckets).sort((a,b)=>+a[0]-+b[0]).filter(([k,v])=>v.n>=30).map(([k,v])=>({x:+k, rate:v.r30/v.n*100, n:v.n}));
+
+  // A1C vs readmit rates
+  const a1cOrder = ['None','>8','>7','Norm'];
+  const a1cLabels = {'None':'Not Tested','>8':'High (>8%)','>7':'High (>7%)', 'Norm':'Normal'};
+
+  // Heatmap: diag × A1C
+  const heatmap = {};
+  DATA.forEach(r=>{
+    const d=r.diag_group||'Other', a=r.A1Cresult||'None', bin=+r.readmitted_binary||0;
+    if(!heatmap[d]) heatmap[d]={};
+    if(!heatmap[d][a]) heatmap[d][a]={n:0,r30:0};
+    heatmap[d][a].n++; if(bin) heatmap[d][a].r30++;
+  });
+
+  // Risk table — sample of readmitted<30 patients
+  const readmit30 = DATA.filter(r=>r.readmitted==='<30').sort((a,b)=>(+b.number_inpatient||0)-(+a.number_inpatient||0)).slice(0,50);
+
+  STATS = {
+    n, r30, r30gt, rno,
+    readmitRate: r30/n*100,
+    avgStay: staySum/n,
+    hba1cRate: hba1cTested/n*100,
+    avgMeds: medSum/n,
+    medianAge, age60rate, ageLT30rate,
+    femaleRate, medChangeRate, onDiabMed, changeTestedRate,
+    highRisk,
+    priorInReadmit: priorVisitSums.count30 ? priorVisitSums.priorIn30/priorVisitSums.count30 : 0,
+    byDiag: rateObj(byDiag), byAge: rateObj(byAge), byRace: rateObj(byRace),
+    byGender: rateObj(byGender), byA1C: rateObj(byA1C), byInsulin: rateObj(byInsulin),
+    byChange: rateObj(byChange), byAdmSrc: rateObj(byAdmSrc), byDischarge: rateObj(byDischarge),
+    topDx, ageOrder, a1cOrder, a1cLabels, heatmap, medArr, readmit30
+  };
+}
+
+// ─── KPI FILL ─────────────────────────────────────────────────────────────────
+function fillKPIs() {
+  const s = STATS;
+  // Topbar
+  document.getElementById('meta-total').textContent = s.n.toLocaleString();
+  document.getElementById('meta-rate').textContent = s.readmitRate.toFixed(1)+'%';
+  // P1
+  document.getElementById('kpi-total').textContent = s.n.toLocaleString();
+  document.getElementById('kpi-readmit').textContent = s.readmitRate.toFixed(1)+'%';
+  document.getElementById('kpi-stay').textContent = s.avgStay.toFixed(1)+'d';
+  document.getElementById('kpi-hba1c').textContent = s.hba1cRate.toFixed(1)+'%';
+  // P2
+  document.getElementById('kpi-age').textContent = s.medianAge;
+  document.getElementById('kpi-old').textContent = s.age60rate.toFixed(1)+'%';
+  document.getElementById('kpi-female').textContent = s.femaleRate.toFixed(1)+'%';
+  document.getElementById('kpi-young').textContent = s.ageLT30rate.toFixed(1)+'%';
+  // P3
+  const noTestRate = s.byA1C['None']?.rate||0;
+  const normRate = s.byA1C['Norm']?.rate||0;
+  document.getElementById('kpi-nohba1c').textContent = (100-s.hba1cRate).toFixed(1)+'%';
+  document.getElementById('kpi-readnone').textContent = noTestRate.toFixed(1)+'%';
+  document.getElementById('kpi-readnorm').textContent = normRate.toFixed(1)+'%';
+  document.getElementById('kpi-topdx').textContent = s.topDx?.[0]||'—';
+  // P4
+  document.getElementById('kpi-meds').textContent = s.avgMeds.toFixed(1);
+  document.getElementById('kpi-changed').textContent = s.medChangeRate.toFixed(1)+'%';
+  document.getElementById('kpi-diabmed').textContent = s.onDiabMed.toFixed(1)+'%';
+  document.getElementById('kpi-changetested').textContent = s.changeTestedRate.toFixed(1)+'%';
+  // P5
+  document.getElementById('kpi-highrisk').textContent = s.highRisk.toLocaleString();
+  document.getElementById('kpi-prior').textContent = s.priorInReadmit.toFixed(2);
+  // Gauge text
+  document.getElementById('gauge1-val').textContent = s.hba1cRate.toFixed(1)+'%';
+  document.getElementById('gauge1-val2').textContent = s.hba1cRate.toFixed(1)+'%';
+}
+
+// ─── CHART HELPERS ───────────────────────────────────────────────────────────
+const COLORS = {
+  teal:'rgba(0,212,177,0.85)', coral:'rgba(255,107,107,0.85)',
+  blue:'rgba(78,158,255,0.85)', amber:'rgba(255,179,71,0.85)',
+  purple:'rgba(167,139,250,0.85)', green:'rgba(52,211,153,0.85)',
+  red:'rgba(248,113,113,0.85)', dim:'rgba(74,86,112,0.5)'
+};
+const CHART_DEFAULTS = {
+  color:'#7b89a8', borderColor:'#2a3246',
+  plugins:{ legend:{labels:{color:'#7b89a8',font:{family:"'DM Sans',sans-serif",size:11},boxWidth:10,padding:12}},
+    tooltip:{backgroundColor:'#1e2536',titleColor:'#e6eaf4',bodyColor:'#7b89a8',borderColor:'#2a3246',borderWidth:1,padding:10,titleFont:{family:"'DM Mono',monospace"},bodyFont:{family:"'DM Mono',monospace"}} },
+  scales:{x:{ticks:{color:'#7b89a8',font:{family:"'DM Sans',sans-serif",size:11}},grid:{color:'rgba(42,50,70,0.6)'},border:{color:'#2a3246'}},
+          y:{ticks:{color:'#7b89a8',font:{family:"'DM Sans',sans-serif",size:11}},grid:{color:'rgba(42,50,70,0.6)'},border:{color:'#2a3246'}}}
+};
+function mk(id, type, data, options) {
+  if(CHARTS[id]) CHARTS[id].destroy();
+  const ctx = document.getElementById(id)?.getContext('2d');
+  if(!ctx) return;
+  CHARTS[id] = new Chart(ctx, {type, data, options: mergeOpts(options||{})});
+}
+function mergeOpts(o) {
+  return { responsive:true, maintainAspectRatio:false, color:'#7b89a8', borderColor:'#2a3246',
+    plugins:{...CHART_DEFAULTS.plugins,...(o.plugins||{})},
+    scales:{x:{...CHART_DEFAULTS.scales.x,...(o.scales?.x||{})},y:{...CHART_DEFAULTS.scales.y,...(o.scales?.y||{})}},
+    ...Object.fromEntries(Object.entries(o).filter(([k])=>!['plugins','scales'].includes(k)))
+  };
+}
+
+// ─── GAUGE DRAWING ───────────────────────────────────────────────────────────
+function drawGauge(canvasId, value, min, max, target, colors) {
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H-10, R = Math.min(W,H*1.6)/2 - 10;
+  ctx.clearRect(0,0,W,H);
+  // Background arc
+  ctx.beginPath(); ctx.arc(cx,cy,R,Math.PI,0,false);
+  ctx.lineWidth=14; ctx.strokeStyle='#2a3246'; ctx.stroke();
+  // Color zones
+  const zones = colors||[{from:0,to:30,c:'#f87171'},{from:30,to:60,c:'#ffb347'},{from:60,to:100,c:'#34d399'}];
+  zones.forEach(z=>{
+    const sa = Math.PI + (z.from/100)*Math.PI;
+    const ea = Math.PI + (z.to/100)*Math.PI;
+    ctx.beginPath(); ctx.arc(cx,cy,R,sa,ea,false);
+    ctx.lineWidth=14; ctx.strokeStyle=z.c; ctx.stroke();
+  });
+  // Value arc
+  const pct = Math.min(Math.max((value-min)/(max-min),0),1);
+  const angle = Math.PI + pct*Math.PI;
+  ctx.beginPath(); ctx.arc(cx,cy,R,Math.PI,angle,false);
+  ctx.lineWidth=14; ctx.strokeStyle='#00d4b1'; ctx.stroke();
+  // Needle
+  const needleAngle = Math.PI + pct*Math.PI;
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.rotate(needleAngle);
+  ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(R-20,0);
+  ctx.lineWidth=2.5; ctx.strokeStyle='#e6eaf4'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2);
+  ctx.fillStyle='#e6eaf4'; ctx.fill();
+  ctx.restore();
+  // Target line
+  if(target!==undefined){
+    const tp = (target-min)/(max-min);
+    const ta = Math.PI + tp*Math.PI;
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(ta);
+    ctx.beginPath(); ctx.moveTo(R-28,0); ctx.lineTo(R-12,0);
+    ctx.lineWidth=2.5; ctx.strokeStyle='#ffb347'; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─── BUILD ALL CHARTS ─────────────────────────────────────────────────────────
+function buildAllCharts() {
+  fillKPIs();
+  buildPage1(); buildPage2(); buildPage3(); buildPage4(); buildPage5();
+  buildHeatmap(); buildFunnel(); buildRiskTable();
+  drawGauge('c-gauge1', STATS.hba1cRate, 0, 100, 50,
+    [{from:0,to:20,c:'#f87171'},{from:20,to:40,c:'#ffb347'},{from:40,to:100,c:'#34d399'}]);
+  drawGauge('c-gauge2', 0.67, 0.5, 1.0, 0.75,
+    [{from:0,to:33,c:'#f87171'},{from:33,to:55,c:'#ffb347'},{from:55,to:100,c:'#34d399'}]);
+}
+
+// ─── PAGE 1 ───────────────────────────────────────────────────────────────────
+function buildPage1() {
+  const s = STATS;
+  // Donut
+  mk('c-donut1','doughnut',{
+    labels:['No Readmission','>30 Days','<30 Days (⚠)'],
+    datasets:[{data:[s.rno,s.r30gt,s.r30],backgroundColor:['rgba(52,211,153,0.8)','rgba(78,158,255,0.7)','rgba(255,107,107,0.9)'],borderColor:'#161b27',borderWidth:2,hoverOffset:6}]
+  },{plugins:{legend:{position:'bottom',labels:{color:'#7b89a8',font:{size:11},boxWidth:10,padding:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${ctx.raw.toLocaleString()} (${(ctx.raw/s.n*100).toFixed(1)}%)`}}},scales:{x:{display:false},y:{display:false}},cutout:'62%'});
+
+  // Diagnosis bar
+  const diagOrder = Object.entries(s.byDiag).sort((a,b)=>b[1].rate-a[1].rate);
+  const avg = s.readmitRate;
+  mk('c-diag-bar','bar',{
+    labels: diagOrder.map(d=>d[0]),
+    datasets:[{label:'Readmission Rate %',data:diagOrder.map(d=>+d[1].rate.toFixed(2)),backgroundColor:diagOrder.map(d=>d[1].rate>avg?'rgba(255,107,107,0.8)':'rgba(78,158,255,0.7)'),borderRadius:4,borderSkipped:false}]
+  },{indexAxis:'y',plugins:{legend:{display:false},annotation:{annotations:{line1:{type:'line',xMin:avg,xMax:avg,borderColor:'rgba(255,179,71,0.8)',borderWidth:1.5,borderDash:[4,3]}}}},scales:{x:{title:{display:true,text:'Readmission Rate (%)',color:'#7b89a8',font:{size:11}}},y:{ticks:{font:{size:11}}}}});
+
+  // Admission source
+  const adm = Object.entries(s.byAdmSrc).sort((a,b)=>b[1].rate-a[1].rate);
+  mk('c-adm-src','bar',{
+    labels:adm.map(d=>d[0]),
+    datasets:[{label:'Readmission Rate %',data:adm.map(d=>+d[1].rate.toFixed(2)),backgroundColor:[COLORS.teal,COLORS.blue,COLORS.amber],borderRadius:6,maxBarThickness:50}]
+  },{plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+}
+
+// ─── PAGE 2 ───────────────────────────────────────────────────────────────────
+function buildPage2() {
+  const s = STATS;
+  // Age bar
+  const ageData = s.ageOrder.map(a=>s.byAge[a]);
+  const ageRates = ageData.map(d=>d?+d.rate.toFixed(2):null);
+  const ageLabels = s.ageOrder.map(a=>a.replace('[','').replace(')',''));
+  mk('c-age-bar','bar',{
+    labels:ageLabels,
+    datasets:[{label:'Readmission Rate %',data:ageRates,backgroundColor:ageRates.map(r=>r>=10?'rgba(255,107,107,0.85)':r>=8?'rgba(255,179,71,0.8)':'rgba(52,211,153,0.75)'),borderRadius:4,maxBarThickness:55}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const d=ageData[ctx.dataIndex];return[` Rate: ${ctx.raw}%`,` Patients: ${d?.n.toLocaleString()||'—'}`]}}}},scales:{y:{title:{display:true,text:'30-Day Readmit Rate (%)',color:'#7b89a8',font:{size:11}},max:16}}});
+
+  // Race donut
+  const raceEntries = Object.entries(s.byRace).sort((a,b)=>b[1].n-a[1].n);
+  mk('c-race-donut','doughnut',{
+    labels:raceEntries.map(r=>r[0]),
+    datasets:[{data:raceEntries.map(r=>r[1].n),backgroundColor:['rgba(78,158,255,0.8)','rgba(255,107,107,0.75)','rgba(52,211,153,0.75)','rgba(255,179,71,0.75)','rgba(167,139,250,0.75)','rgba(0,212,177,0.75)'],borderColor:'#161b27',borderWidth:2}]
+  },{plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}},tooltip:{callbacks:{label:ctx=>{const r=raceEntries[ctx.dataIndex];return[` ${r[0]}: ${r[1].n.toLocaleString()}`,` Readmit: ${r[1].rate.toFixed(1)}%`]}}}},scales:{x:{display:false},y:{display:false}},cutout:'55%'});
+
+  // Race bar
+  const raceSorted = Object.entries(s.byRace).filter(r=>r[1].n>200).sort((a,b)=>b[1].rate-a[1].rate);
+  mk('c-race-bar','bar',{
+    labels:raceSorted.map(r=>r[0]),
+    datasets:[{label:'Readmission Rate %',data:raceSorted.map(r=>+r[1].rate.toFixed(2)),backgroundColor:raceSorted.map(r=>r[1].rate>s.readmitRate?COLORS.coral:COLORS.teal),borderRadius:4,maxBarThickness:55}]
+  },{plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+
+  // Gender
+  const gEntries = Object.entries(s.byGender).filter(g=>g[0]!='Unknown/Invalid').sort((a,b)=>b[1].n-a[1].n);
+  mk('c-gender','bar',{
+    labels:gEntries.map(g=>g[0]),
+    datasets:[{label:'Patient Count',data:gEntries.map(g=>g[1].n),backgroundColor:[COLORS.purple,COLORS.teal],borderRadius:4,maxBarThickness:70,yAxisID:'y'},{label:'Readmission %',data:gEntries.map(g=>+g[1].rate.toFixed(2)),backgroundColor:[COLORS.coral,COLORS.amber],borderRadius:4,maxBarThickness:70,yAxisID:'y2'}]
+  },{plugins:{legend:{display:true,position:'bottom'}},scales:{y:{title:{display:true,text:'Patient Count',color:'#7b89a8',font:{size:11}}},y2:{position:'right',title:{display:true,text:'Readmit %',color:'#7b89a8',font:{size:11}},grid:{display:false}}}});
+
+  // Discharge
+  const dEntries = Object.entries(s.byDischarge).sort((a,b)=>b[1].rate-a[1].rate).slice(0,6);
+  mk('c-discharge','bar',{
+    labels:dEntries.map(d=>d[0]),
+    datasets:[{label:'Readmission Rate %',data:dEntries.map(d=>+d[1].rate.toFixed(2)),backgroundColor:dEntries.map(d=>d[1].rate>s.readmitRate?COLORS.coral:COLORS.blue),borderRadius:4,maxBarThickness:50}]
+  },{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+}
+
+// ─── PAGE 3 ───────────────────────────────────────────────────────────────────
+function buildPage3() {
+  const s = STATS;
+  // HbA1c bar
+  const a1cOrder=['None','>8','>7','Norm'];
+  const a1cNames={'None':'Not Tested','>8':'High >8%','>7':'High >7%','Norm':'Normal'};
+  const a1cData = a1cOrder.filter(k=>s.byA1C[k]).map(k=>({k,d:s.byA1C[k]}));
+  mk('c-hba1c-readmit','bar',{
+    labels:a1cData.map(x=>a1cNames[x.k]),
+    datasets:[{label:'Readmission Rate %',data:a1cData.map(x=>+x.d.rate.toFixed(2)),backgroundColor:a1cData.map(x=>x.k==='None'?COLORS.red:x.k==='Norm'?COLORS.green:COLORS.amber),borderRadius:5,maxBarThickness:70}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const d=a1cData[ctx.dataIndex].d;return[` Rate: ${ctx.raw}%`,` Patients: ${d.n.toLocaleString()}`]}}}},scales:{y:{title:{display:true,text:'30-Day Readmit Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+
+  // Waterfall-style deviation chart
+  const avg = s.readmitRate;
+  const devData = Object.entries(s.byDiag).map(([k,v])=>({k,dev:+(v.rate-avg).toFixed(2),n:v.n})).sort((a,b)=>b.dev-a.dev);
+  mk('c-diag-waterfall','bar',{
+    labels:devData.map(d=>d.k),
+    datasets:[{label:'Deviation from 9.0% avg',data:devData.map(d=>d.dev),backgroundColor:devData.map(d=>d.dev>0?'rgba(248,113,113,0.8)':'rgba(52,211,153,0.75)'),borderRadius:4,maxBarThickness:55}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw>0?'+':''}${ctx.raw}% vs avg`}}},scales:{y:{title:{display:true,text:'Deviation from 9.0% avg',color:'#7b89a8',font:{size:11}}}}});
+
+  // Stay by diag
+  const diagStay = Object.entries(s.byDiag).sort((a,b)=>b[1].staySum/b[1].n - a[1].staySum/a[1].n);
+  mk('c-stay-diag','bar',{
+    labels:diagStay.map(d=>d[0]),
+    datasets:[{label:'Avg Days',data:diagStay.map(d=>+(d[1].staySum/d[1].n).toFixed(1)),backgroundColor:COLORS.blue,borderRadius:4,maxBarThickness:50}]
+  },{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Avg Days in Hospital',color:'#7b89a8',font:{size:11}}}}});
+
+  // Number of diagnoses
+  const ndiagBuckets={};
+  DATA.forEach(r=>{const b=Math.min(+r.number_diagnoses||1,14),bin=+r.readmitted_binary||0;if(!ndiagBuckets[b])ndiagBuckets[b]={n:0,r30:0};ndiagBuckets[b].n++;if(bin)ndiagBuckets[b].r30++;});
+  const nd = Object.entries(ndiagBuckets).sort((a,b)=>+a[0]-+b[0]).filter(([k,v])=>v.n>=30);
+  mk('c-ndiag','line',{
+    labels:nd.map(d=>d[0]),
+    datasets:[{label:'Readmission Rate %',data:nd.map(d=>+(d[1].r30/d[1].n*100).toFixed(2)),borderColor:COLORS.coral,backgroundColor:'rgba(255,107,107,0.08)',fill:true,tension:0.35,pointBackgroundColor:COLORS.coral,pointRadius:4}]
+  },{plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Number of Diagnoses',color:'#7b89a8',font:{size:11}}},y:{title:{display:true,text:'Readmit Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+}
+
+// ─── HEATMAP ──────────────────────────────────────────────────────────────────
+function buildHeatmap() {
+  const s = STATS;
+  const diagOrder = Object.keys(s.byDiag).sort();
+  const a1cCols = ['None','>8','>7','Norm'];
+  const a1cNames = {'None':'No Test','>8':'>8%','>7':'>7%','Norm':'Normal'};
+
+  // Find min/max for color scaling
+  let minR=99,maxR=0;
+  diagOrder.forEach(d=>a1cCols.forEach(a=>{const v=s.heatmap[d]?.[a];if(v&&v.n>=10){const r=v.r30/v.n*100;if(r<minR)minR=r;if(r>maxR)maxR=r;}}));
+
+  function heatColor(rate) {
+    if(isNaN(rate)||rate===null) return '#1e2536';
+    const t = Math.min((rate-minR)/(maxR-minR||1),1);
+    const r = Math.round(52+(248-52)*t);
+    const g = Math.round(211+(113-211)*t);
+    const b = Math.round(153+(113-153)*t);
+    return `rgba(${r},${g},${b},0.75)`;
+  }
+
+  let html = '<table class="heatmap"><thead><tr><th>Diagnosis Group</th>';
+  a1cCols.forEach(a=>html+=`<th>${a1cNames[a]}</th>`);
+  html += '</tr></thead><tbody>';
+  diagOrder.forEach(d=>{
+    html += `<tr><td class="row-header">${d}</td>`;
+    a1cCols.forEach(a=>{
+      const v = s.heatmap[d]?.[a];
+      const rate = v&&v.n>=10 ? v.r30/v.n*100 : null;
+      const bg = heatColor(rate);
+      const tc = rate!==null && rate>9 ? '#fff' : '#e6eaf4';
+      html += `<td style="background:${bg};color:${tc}" title="${d} + ${a1cNames[a]}: ${rate!==null?rate.toFixed(1)+'%':'n/a'}">${rate!==null?rate.toFixed(1)+'%':'—'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmap-container').innerHTML = html;
+}
+
+// ─── PAGE 4 ───────────────────────────────────────────────────────────────────
+function buildPage4() {
+  const s = STATS;
+  // Medication line
+  mk('c-med-line','line',{
+    labels:s.medArr.map(m=>m.x),
+    datasets:[{label:'Readmission Rate %',data:s.medArr.map(m=>+m.rate.toFixed(2)),borderColor:COLORS.teal,backgroundColor:'rgba(0,212,177,0.06)',fill:true,tension:0.4,pointBackgroundColor:s.medArr.map(m=>m.rate>s.readmitRate?COLORS.coral:COLORS.teal),pointRadius:4}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const m=s.medArr[ctx.dataIndex];return[` Rate: ${ctx.raw}%`,` Patients: ${m.n.toLocaleString()}`]}}}},scales:{x:{title:{display:true,text:'Number of Medications',color:'#7b89a8',font:{size:11}}},y:{title:{display:true,text:'Readmit Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+
+  // Insulin
+  const inOrder=['No','Steady','Up','Down'];
+  const inColors={No:COLORS.dim,Steady:COLORS.blue,Up:COLORS.coral,Down:COLORS.amber};
+  const inData = inOrder.filter(k=>s.byInsulin[k]).map(k=>({k,d:s.byInsulin[k]}));
+  mk('c-insulin','bar',{
+    labels:inData.map(x=>x.k),
+    datasets:[{label:'Readmission Rate %',data:inData.map(x=>+x.d.rate.toFixed(2)),backgroundColor:inData.map(x=>inColors[x.k]),borderRadius:5,maxBarThickness:70}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const d=inData[ctx.dataIndex].d;return[` Rate: ${ctx.raw}%`,` Patients: ${d.n.toLocaleString()}`]}}}},scales:{y:{title:{display:true,text:'30-Day Readmit Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+
+  // Med change by A1C
+  const changeByA1C = {};
+  DATA.forEach(r=>{
+    const a=r.A1Cresult||'None';
+    if(!changeByA1C[a]) changeByA1C[a]={n:0,changed:0};
+    changeByA1C[a].n++;
+    if(r.change==='Ch') changeByA1C[a].changed++;
+  });
+  const cbOrder=['None','>8','>7','Norm'];
+  const cbLabels={'None':'Not Tested','>8':'High >8%','>7':'High >7%','Norm':'Normal'};
+  const cbData = cbOrder.filter(k=>changeByA1C[k]).map(k=>({k,rate:(changeByA1C[k].changed/changeByA1C[k].n*100)}));
+  mk('c-med-change','bar',{
+    labels:cbData.map(x=>cbLabels[x.k]),
+    datasets:[{label:'Med Change Rate %',data:cbData.map(x=>+x.rate.toFixed(1)),backgroundColor:cbData.map(x=>x.k==='None'?COLORS.amber:COLORS.teal),borderRadius:5,maxBarThickness:70}]
+  },{plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Medication Change Rate (%)',color:'#7b89a8',font:{size:11}}}}});
+}
+
+// ─── FUNNEL ───────────────────────────────────────────────────────────────────
+function buildFunnel() {
+  const s = STATS;
+  const total = s.n;
+  const tested = Math.round(s.hba1cRate/100*total);
+  const high = s.byA1C['>8'] ? s.byA1C['>8'].n : 0;
+  const changed = s.byChange['Ch'] ? s.byChange['Ch'].n : 0;
+  const notReadmit30 = total - s.r30;
+
+  const steps = [
+    {label:'All admitted patients',      n:total,   color:'rgba(78,158,255,0.8)'},
+    {label:'Had HbA1c test',             n:tested,  color:'rgba(0,212,177,0.8)'},
+    {label:'High result (>8%)',          n:high,    color:'rgba(255,179,71,0.8)'},
+    {label:'Medication was changed',     n:changed, color:'rgba(167,139,250,0.8)'},
+    {label:'Not readmitted (<30 days)',  n:notReadmit30, color:'rgba(52,211,153,0.8)'},
+  ];
+  const maxN = steps[0].n;
+
+  let html = '<div class="funnel">';
+  steps.forEach((step,i) => {
+    const pct = Math.max(step.n/maxN*100, 8);
+    html += `<div class="funnel-step">
+      <div class="funnel-label">${step.label}</div>
+      <div class="funnel-bar-wrap">
+        <div class="funnel-bar" style="width:${pct}%;background:${step.color}">
+          ${(step.n/maxN*100).toFixed(1)}%
+        </div>
+      </div>
+      <div class="funnel-count">${step.n.toLocaleString()}</div>
+    </div>`;
+    if(i < steps.length-1) html += '<div class="funnel-arrow">↓</div>';
+  });
+  html += '</div>';
+  document.getElementById('funnel-container').innerHTML = html;
+}
+
+// ─── PAGE 5 ───────────────────────────────────────────────────────────────────
+function buildPage5() {
+  // Feature importance (from Random Forest model results)
+  const features = [
+    {f:'Number of inpatient visits', imp:0.142, cat:'Top'},
+    {f:'Number of diagnoses',        imp:0.118, cat:'Top'},
+    {f:'Time in hospital',           imp:0.107, cat:'Top'},
+    {f:'Total prior visits',         imp:0.098, cat:'Top'},
+    {f:'Number of medications',      imp:0.091, cat:'Mid'},
+    {f:'Number of lab procedures',   imp:0.087, cat:'Mid'},
+    {f:'Age',                        imp:0.079, cat:'Mid'},
+    {f:'Discharge location',         imp:0.068, cat:'Mid'},
+    {f:'Insulin status',             imp:0.054, cat:'Low'},
+    {f:'Diagnosis group',            imp:0.051, cat:'Low'},
+    {f:'HbA1c result',               imp:0.049, cat:'Low'},
+    {f:'Medication change',          imp:0.041, cat:'Low'},
+  ].reverse();
+  mk('c-feat-imp','bar',{
+    labels:features.map(f=>f.f),
+    datasets:[{label:'Importance Score',data:features.map(f=>f.imp),backgroundColor:features.map(f=>f.cat==='Top'?COLORS.red:f.cat==='Mid'?COLORS.amber:COLORS.blue),borderRadius:3}]
+  },{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`Importance: ${ctx.raw.toFixed(3)}`}}},scales:{x:{title:{display:true,text:'Feature Importance Score',color:'#7b89a8',font:{size:11}}},y:{ticks:{font:{size:11}}}}});
+
+  // Risk scatter — by age group
+  const s = STATS;
+  const ageOrder = s.ageOrder;
+  const bubbleData = ageOrder.filter(a=>s.byAge[a]&&s.byAge[a].n>=50).map(a=>{
+    const d = s.byAge[a];
+    const ageNum = +a.replace(/\D/g,'').slice(0,2)+5;
+    const priorAvg = DATA.filter(r=>r.age===a).reduce((sum,r)=>sum+(+r.number_inpatient||0),0)/d.n;
+    const dxAvg = DATA.filter(r=>r.age===a).reduce((sum,r)=>sum+(+r.number_diagnoses||0),0)/d.n;
+    return {x:+priorAvg.toFixed(2), y:+dxAvg.toFixed(2), r:Math.max(d.rate*0.8,4), label:a};
+  });
+  mk('c-risk-scatter','bubble',{
+    datasets:[{label:'Age group',data:bubbleData,backgroundColor:bubbleData.map(d=>d.r>6?'rgba(248,113,113,0.7)':'rgba(78,158,255,0.6)'),borderColor:bubbleData.map(d=>d.r>6?'rgba(248,113,113,1)':'rgba(78,158,255,1)'),borderWidth:1}]
+  },{plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const d=bubbleData[ctx.dataIndex];return[` Age: ${d.label}`,` Prior inpatient: ${d.x}`,` Avg diagnoses: ${d.y}`,` Readmit rate: ~${(d.r/0.8).toFixed(1)}%`]}}}},scales:{x:{title:{display:true,text:'Avg Prior Inpatient Visits',color:'#7b89a8',font:{size:11}}},y:{title:{display:true,text:'Avg Number of Diagnoses',color:'#7b89a8',font:{size:11}}}}});
+}
+
+// ─── RISK TABLE ───────────────────────────────────────────────────────────────
+function buildRiskTable() {
+  const rows = STATS.readmit30.slice(0,30);
+  let html = '<table class="risk-table"><thead><tr><th>Age</th><th>Diagnosis</th><th>Prior Inpatient</th><th>Diagnoses #</th><th>Days</th><th>HbA1c</th><th>Medications</th><th>Risk Level</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const inpt=+r.number_inpatient||0, dx=+r.number_diagnoses||0;
+    const risk = inpt>=2&&dx>=7?'Top':inpt>=1&&dx>=5?'Mid':'Low';
+    const bc={'Top':'badge-top','Mid':'badge-mid','Low':'badge-low'}[risk];
+    const rl={'Top':'High','Mid':'Medium','Low':'Lower'}[risk];
+    html+=`<tr><td>${r.age||'—'}</td><td>${r.diag_group||'—'}</td><td style="color:${inpt>=2?'#f87171':'#7b89a8'}">${inpt}</td><td style="color:${dx>=7?'#f87171':'#7b89a8'}">${dx}</td><td>${r.time_in_hospital||'—'}</td><td>${r.A1Cresult||'—'}</td><td>${r.num_medications||'—'}</td><td><span class="risk-badge ${bc}">${rl}</span></td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('risk-table-wrap').innerHTML = html;
+}
+
+// ─── WHAT-IF ──────────────────────────────────────────────────────────────────
+function updateWhatIf(val) {
+  const v = +val;
+  document.getElementById('whatif-rate').textContent = v+'%';
+  const base = 0.184, current = STATS.r30||6285;
+  const delta = (v/100 - base);
+  const factor = delta * 0.15;
+  const avoided = Math.max(0, Math.round(current * factor));
+  const pct = current>0?(avoided/current*100):0;
+  const cost = avoided * 5000;
+  document.getElementById('whatif-avoided').textContent = avoided.toLocaleString();
+  document.getElementById('whatif-pct').textContent = pct.toFixed(1)+'%';
+  document.getElementById('whatif-cost').textContent = '$'+Math.round(cost/1000)+'K';
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function goPage(idx) {
+  document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===idx));
+  document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  window.scrollTo&&document.querySelector('.content').scrollTo(0,0);
+}
+</script>
+</body>
+</html>
